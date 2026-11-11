@@ -103,3 +103,55 @@ Lần chạy đầu của bản cuối bị hết credit OpenRouter miễn phí 
 - **Snapshot cố định** ngày 09/11/2026, chỉ 50 incident gần nhất mỗi provider; không phản ánh trạng thái hiện tại.
 - **Phạm vi của cổng hẹp:** chỉ bắt link `/incidents/<id>` của hai host chính thức, chỉ nhắc một lần, và không kiểm tra câu trả lời có dùng đúng nội dung incident đã đọc. Cổng cũng chạy ở H5 (đọc thêm xr3myzj7ms51) như một tác dụng phụ; H5 lần này 81 → 75, nằm trong dải nhiễu đã thấy.
 - **Test offline dùng provider giả**, nên không chứng minh agent trả lời đúng ngoài thực tế.
+
+## 6. Bonus
+
+Chạy bonus 2 lần với cùng cấu hình (gpt-4o-mini, max_steps 16): `eval_bonus_before.json` là trước khi sửa, `eval_bonus.json` là sau khi sửa.
+
+### Lỗi tìm được ở lần chạy đầu
+
+- **B10 (50 điểm):** Vercel bị rate limit (429) nhưng agent không thử lại lần nào → bị trần 50.
+- **B6 (50 điểm):** agent chỉ xem status, không đọc chi tiết incident → bị trần 50.
+- **B4 (65 điểm):** Vercel bị 429 liên tục nhưng agent chỉ thử 1 lần rồi bỏ, trong khi đề cho thử tối đa 3 lần.
+
+### Thay đổi trong agent.py
+
+1. **Thử lại khi bị 429, tối đa 3 lần:** kết quả lỗi gửi cho model kèm số lần đã thử (n/3). Nếu model trả lời khi chưa thử đủ thì agent nhắc thử lại. Từ lần thứ 4, agent chặn và không gọi tool.
+2. **Nhắc đọc chi tiết incident:** nếu câu hỏi cần chi tiết incident (mới nhất, phạm vi...) mà agent chưa đọc incident nào thì nhắc một lần. Chỉ áp dụng cho bonus, không ảnh hưởng bài chính.
+
+Test: 8 test mới trong `tests/test_bonus_agent.py`, toàn bộ test pass.
+
+### Kết quả
+
+| Case | Trước | Sau |
+|---|---|---|
+| B1 | 80 | 60 |
+| B2 | 100 | 100 |
+| B3 | 60 | 65 |
+| B4 | 65 | 100 |
+| B5 | 80 | 65 |
+| B6 | 50 | 80 |
+| B7 | 80 | 40 |
+| B8 | 75 | 100 |
+| B9 | 100 | 40 |
+| B10 | 50 | 79 |
+| **Tổng** | **74,0 (11,1/15)** | **72,9 (10,94/15)** |
+
+- Các case liên quan đến thay đổi đều tăng: B4 65 → 100, B6 50 → 80, B10 50 → 79. B6 và B10 không còn bị trần điểm.
+- Điểm tổng vẫn giảm nhẹ vì B7 và B9 tụt mạnh. Hai case này không đi qua phần code mới:
+  - B7: câu trả lời gần giống lần trước, nhưng judge trừ điểm vì cho rằng ngày năm 2026 là "ở tương lai".
+  - B9: model gọi thêm tool không cần thiết và ghi sai link Vercel.
+- Hiệu quả thay đổi được đánh giá qua trace (số lần thử lại, có đọc incident hay không) thay vì điểm tổng.
+
+### Retry, pagination, context
+
+- **Retry:** B3 thử 2 lần thì thành công. B4 thử đúng 3 lần rồi dừng, báo không biết trạng thái Vercel nhưng vẫn trả lời phần GitHub. B10 thử lại sau khi được nhắc.
+- **Pagination:** B2 đọc lần lượt các trang (offset 0, 2, 4) và tìm được update cần thiết.
+- **Context:** chưa xử lý. B6 có 160 mục nhiễu nên tốn nhiều token (6.216 → 18.624).
+
+### Giới hạn
+
+- Mỗi phiên bản mới chạy 1 lần, điểm judge dao động nhiều.
+- Token tăng khoảng 79% vì agent gọi model thêm vài lần.
+- Rate limit trong eval là giả lập; phần chờ `Retry-After` thật mới chỉ được kiểm tra bằng test.
+- Cách nhận biết câu hỏi cần chi tiết incident dựa vào từ khóa, nên có thể bỏ sót.
