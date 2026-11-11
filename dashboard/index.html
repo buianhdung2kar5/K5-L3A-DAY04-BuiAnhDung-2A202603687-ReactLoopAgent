@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eval Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f3f5f8; --card: #ffffff; --text: #1a2230; --muted: #5b6678; --line: #d9dee6;
+    --accent: #1d4ed8; --good: #15803d; --bad: #b91c1c; --warn: #b45309; --chip: #eaeef4;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 28px 0 10px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .pickers { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .drop label { display: block; font-weight: 600; margin-bottom: 6px; }
+  .drop input { width: 100%; }
+  .drop .meta { color: var(--muted); font-size: 13px; margin-top: 6px; min-height: 1.4em; }
+  .err { color: var(--bad); font-size: 13px; margin-top: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .stat .k { color: var(--muted); font-size: 13px; }
+  .stat .v { font-size: 26px; font-weight: 700; margin-top: 2px; }
+  .stat .d { font-size: 13px; margin-top: 2px; }
+  .up { color: var(--good); } .down { color: var(--bad); } .flat { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.row { cursor: pointer; }
+  tr.row:hover { background: var(--chip); }
+  .q { max-width: 420px; color: var(--muted); font-size: 13px; }
+  .chip { display: inline-block; background: var(--chip); border-radius: 999px; padding: 1px 9px; font-size: 12px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--chip); overflow: hidden; min-width: 70px; }
+  .bar > i { display: block; height: 100%; background: var(--accent); }
+  .detail { display: none; background: var(--bg); }
+  .detail.open { display: table-row; }
+  .detail .inner { padding: 6px 4px 14px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .box { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+  .box h4 { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+  pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 12.5px/1.45 ui-monospace, Consolas, monospace; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .filters button { border: 1px solid var(--line); background: var(--card); color: var(--text);
+                    border-radius: 999px; padding: 4px 12px; cursor: pointer; font: inherit; font-size: 13px; }
+  .filters button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .dims { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+  .dims div { background: var(--chip); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
+  .dims b { display: block; font-size: 15px; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .box.expect { border-color: var(--accent); }
+  .flags { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+  .flag { font-size: 12px; border-radius: 6px; padding: 2px 8px; border: 1px solid var(--line); }
+  .flag.bad { color: var(--bad); border-color: var(--bad); }
+  .flag.warn { color: var(--warn); border-color: var(--warn); }
+  .flag.ok { color: var(--good); border-color: var(--good); }
+  .seq { font: 12.5px/1.5 ui-monospace, Consolas, monospace; word-break: break-word; }
+
+  /* ---------- Tab "Báo cáo demo" theo slide CP6 ---------- */
+  .tabs { display: flex; gap: 8px; margin: 4px 0 18px; flex-wrap: wrap; }
+  .tab { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 999px;
+         padding: 6px 16px; font: inherit; font-weight: 600; cursor: pointer; }
+  .tab.on { background: #1e2a5a; color: #fff; border-color: #1e2a5a; }
+  .cp-title { font-size: 30px; font-weight: 800; color: #1e2a5a; margin: 0 0 6px; letter-spacing: -.01em; }
+  .cp-sub { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 20px; color: #4b5563; font-size: 18px; }
+  .cp-sub .badge { background: #1e2a5a; color: #fff; border-radius: 999px; padding: 6px 16px; font-weight: 700; font-size: 14px; }
+  .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 1000px) { .demo-grid { grid-template-columns: 1fr; } }
+  .win { background: #fff; border: 2px solid #d5dbe6; border-radius: 16px; overflow: hidden;
+         box-shadow: 0 6px 18px rgba(30, 42, 90, .08); min-width: 0; }
+  .win-h { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #eef1f7; border-bottom: 1px solid #d5dbe6; }
+  .win.err .win-h { background: #fde8e6; }
+  .win-h .d { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .d.r { background: #e5484d; } .d.y { background: #e5b43a; } .d.g { background: #4caf50; }
+  .win-t { font: 600 15px ui-monospace, Consolas, monospace; color: #1e2a5a; margin-left: 8px; }
+  .win-ctl { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 10px 16px;
+             border-bottom: 1px solid #eef1f7; font-size: 13px; color: var(--muted); }
+  .win-ctl select { font: inherit; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: #fff; color: var(--text); }
+  .pill { background: #eef1f7; border-radius: 999px; padding: 2px 10px; color: #1e2a5a; font-weight: 600; }
+  .win-b { padding: 14px 16px 18px; }
+  .tl { list-style: none; margin: 0; padding: 0; }
+  .tl-row { display: grid; grid-template-columns: 14px 128px 1fr; gap: 12px; align-items: start; position: relative;
+            padding: 6px 4px; border-radius: 10px; }
+  .tl-row::before { content: ''; position: absolute; left: 10px; top: 24px; bottom: -8px; width: 2px; background: #d5dbe6; }
+  .tl-row:last-child::before { display: none; }
+  .tl-dot { width: 14px; height: 14px; border-radius: 50%; margin-top: 8px; position: relative; z-index: 1; background: #1e2a5a; }
+  .chip2 { text-align: center; font-weight: 700; font-size: 13.5px; padding: 6px 8px; border-radius: 8px; background: #e6ecfb; color: #1e2a5a; }
+  .tl-body { min-width: 0; font-size: 13.5px; padding-top: 5px; word-break: break-word; }
+  .tl-text { white-space: pre-wrap; }
+  .ln { display: inline-block; font: 600 12px ui-monospace, Consolas, monospace; color: #1e2a5a; background: #eef1f7;
+        border-radius: 6px; padding: 0 6px; margin-right: 8px; }
+  .k-call .tl-dot { background: #7a4a00; } .k-call .chip2 { background: #fcefd6; color: #7a4a00; }
+  .k-res .tl-dot { background: #9aa3b2; } .k-res .chip2 { background: #eceef2; color: #4b5563; }
+  .k-model .tl-dot { background: #c3c9d4; width: 10px; height: 10px; margin-left: 2px; }
+  .k-model .chip2 { background: #f4f5f8; color: #6b7280; font-weight: 600; font-size: 12px; }
+  .k-model .tl-body { color: #6b7280; font-size: 12.5px; }
+  .k-gate .tl-dot { background: #c62828; } .k-gate .chip2 { background: #c62828; color: #fff; }
+  .k-ans .tl-dot { background: #1f6b34; } .k-ans .chip2 { background: #e3f4e6; color: #1f6b34; }
+  .tl-row.hl { background: #fff6d6; box-shadow: inset 0 0 0 2px #e5b43a; }
+  .ref { font: 600 12px ui-monospace, Consolas, monospace; border: 1px solid #c62828; color: #c62828; background: #fff;
+         border-radius: 6px; padding: 0 6px; cursor: pointer; margin-right: 4px; }
+  .ref:hover { background: #c62828; color: #fff; }
+  .ref.ok { border-color: #1f6b34; color: #1f6b34; }
+  .ref.ok:hover { background: #1f6b34; color: #fff; }
+  .evi { margin: 0; padding-left: 18px; } .evi li { margin: 2px 0 6px; }
+  .sub2 { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+  .win textarea { width: 100%; min-height: 76px; font: inherit; font-size: 13.5px; border: 1px solid var(--line);
+                  border-radius: 8px; padding: 8px; resize: vertical; background: #fff; color: var(--text); }
+  .after-box { margin-top: 8px; background: #f3faf4; border: 1px solid #cfe9d4; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+  .after-box ul { margin: 4px 0 0; padding-left: 18px; }
+  .done { margin-top: 20px; background: #e7f6ea; border: 1px solid #bfe3c7; border-radius: 14px; padding: 16px 20px; color: #1f6b34; }
+  .done b { font-size: 17px; display: block; margin-bottom: 4px; }
+  @media (max-width: 560px) { .tl-row { grid-template-columns: 12px 92px 1fr; gap: 8px; } .cp-title { font-size: 24px; } }
+  @media (max-width: 720px) {
+    .pickers, .two { grid-template-columns: 1fr; }
+    .dims { grid-template-columns: repeat(2, 1fr); }
+    .q { max-width: 160px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Eval Dashboard</h1>
+  <p class="sub">So sánh kết quả eval lần 1 và lần 2. Khi mở qua Live Server, trang tự đọc eval_before.json và eval_after.json ở thư mục gốc repo (tải lại trang để cập nhật). Dữ liệu chỉ đọc trong trình duyệt của bạn, không gửi đi đâu.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab on" data-tab="demo">Báo cáo demo (CP6)</button>
+    <button class="tab" data-tab="eval">Chi tiết eval</button>
+  </div>
+
+  <section id="tab-demo"><div id="demo"></div></section>
+
+  <section id="tab-eval" hidden>
+    <div class="pickers">
+      <div class="card drop">
+        <label for="f-before">Lần 1 (eval_before.json)</label>
+        <input id="f-before" type="file" accept=".json,application/json">
+        <div class="meta" id="m-before">Chưa chọn file.</div>
+      </div>
+      <div class="card drop">
+        <label for="f-after">Lần 2 (eval_after.json)</label>
+        <input id="f-after" type="file" accept=".json,application/json">
+        <div class="meta" id="m-after">Chưa chọn file.</div>
+      </div>
+    </div>
+    <div id="report"></div>
+  </section>
+</div>
+
+<script>
+'use strict';
+const state = { before: null, after: null, filter: 'all', open: null };
+
+// Escape mọi chuỗi từ file (answer, trace do model sinh ra) trước khi chèn vào HTML.
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+const $ = id => document.getElementById(id);
+const fmt = (n, d = 1) => (n == null || isNaN(n)) ? '—' : Number(n).toFixed(d).replace(/\.0+$/, '');
+
+function tokensOf(u) {
+  if (!u) return 0;
+  if (typeof u.total_tokens === 'number') return u.total_tokens;
+  return (u.prompt_tokens || u.input_tokens || 0) + (u.completion_tokens || u.output_tokens || 0);
+}
+
+function summarize(data) {
+  const cases = data.cases || [];
+  let modelCalls = 0, toolCalls = 0, tokens = 0, cost = 0, hasCost = false;
+  for (const c of cases) {
+    const r = c.result || {};
+    const usage = r.usage || [];
+    modelCalls += usage.length;
+    toolCalls += (r.trace || []).filter(e => e.event === 'tool').length;
+    for (const u of usage) {
+      tokens += tokensOf(u);
+      if (typeof u.cost === 'number') { cost += u.cost; hasCost = true; }
+    }
+    const ju = (c.grade || {}).judge_usage;
+    if (ju && typeof ju.cost === 'number') { cost += ju.cost; hasCost = true; }
+  }
+  const s = data.summary || {};
+  return { cases, total: s.total_cases ?? cases.length, scored: s.scored_cases,
+           unscored: s.unscored_cases, score: s.score_0_100, partial: s.partial_mean_0_100,
+           modelCalls, toolCalls, tokens, cost: hasCost ? cost : null, config: data.config || {} };
+}
+
+function acceptData(which, text, label) {
+  const meta = $('m-' + which);
+  try {
+    const data = JSON.parse(text);
+    if (!data || !Array.isArray(data.cases)) throw new Error('Không phải file eval (thiếu "cases").');
+    state[which] = data;
+    const cfg = data.config || {};
+    meta.className = 'meta';
+    meta.textContent = `${label} · ${data.cases.length} case · ${cfg.model || '?'}`;
+  } catch (e) {
+    state[which] = null;
+    meta.className = 'err';
+    meta.textContent = 'Lỗi: ' + e.message;
+  }
+}
+
+function loadFile(which, file) {
+  const reader = new FileReader();
+  reader.onload = () => { acceptData(which, reader.result, file.name); render(); };
+  reader.readAsText(file);
+}
+
+// Tự đọc file ở thư mục gốc repo khi trang được phục vụ qua http (ví dụ Live Server).
+// Mở bằng file:// thì trình duyệt chặn fetch, khi đó dùng ô chọn file.
+const AUTO = { before: '../eval_before.json', after: '../eval_after.json' };
+async function autoLoad() {
+  if (location.protocol === 'file:') return;
+  for (const which of ['before', 'after']) {
+    try {
+      const res = await fetch(AUTO[which] + '?t=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      acceptData(which, await res.text(), AUTO[which].replace('../', ''));
+    } catch (e) {
+      const meta = $('m-' + which);
+      meta.className = 'meta';
+      meta.textContent = `Chưa có ${AUTO[which].replace('../', '')} (hoặc không đọc được). Có thể chọn file thủ công.`;
+    }
+  }
+  render();
+}
+$('f-before').addEventListener('change', e => e.target.files[0] && loadFile('before', e.target.files[0]));
+$('f-after').addEventListener('change', e => e.target.files[0] && loadFile('after', e.target.files[0]));
+
+function delta(a, b, higherIsBetter, digits = 1, unit = '') {
+  if (a == null || b == null) return '';
+  const d = b - a;
+  if (Math.abs(d) < 1e-9) return `<span class="flat">không đổi</span>`;
+  const good = higherIsBetter ? d > 0 : d < 0;
+  return `<span class="${good ? 'up' : 'down'}">${d > 0 ? '+' : ''}${fmt(d, digits)}${unit}</span>`;
+}
+
+function stat(label, a, b, higherIsBetter, digits, unit) {
+  const val = b != null ? b : a;
+  return `<div class="card stat"><div class="k">${esc(label)}</div>
+    <div class="v">${val == null ? '—' : esc(fmt(val, digits))}${unit && val != null ? esc(unit) : ''}</div>
+    <div class="d">${a != null && b != null ? `Lần 1: ${esc(fmt(a, digits))} → ${delta(a, b, higherIsBetter, digits, unit)}` : '<span class="flat">cần cả hai file để so sánh</span>'}</div></div>`;
+}
+
+function scoreOf(c) {
+  const g = (c && c.grade) || {};
+  return g.status === 'scored' && typeof g.score === 'number' ? g.score : null;
+}
+
+function render() {
+  renderDemo();
+  const out = $('report');
+  const B = state.before ? summarize(state.before) : null;
+  const A = state.after ? summarize(state.after) : null;
+  if (!B && !A) { out.innerHTML = '<p class="hint">Chọn ít nhất một file eval để xem báo cáo.</p>'; return; }
+
+  let html = '<h2>Tổng quan</h2><div class="grid">';
+  html += stat('Điểm tổng (0–100)', B && B.score, A && A.score, true, 1, '');
+  html += stat('Số model call', B && B.modelCalls, A && A.modelCalls, false, 0, '');
+  html += stat('Số tool call', B && B.toolCalls, A && A.toolCalls, false, 0, '');
+  html += stat('Token (agent)', B && B.tokens, A && A.tokens, false, 0, '');
+  html += stat('Chi phí (USD, gồm judge)', B && B.cost, A && A.cost, false, 4, '');
+  html += '</div>';
+
+  // Cảnh báo điểm null / không cùng cấu hình.
+  const warns = [];
+  for (const [n, S] of [['Lần 1', B], ['Lần 2', A]]) {
+    if (S && S.score == null) warns.push(`${n}: điểm tổng là null (${S.unscored ?? '?'} case chưa chấm). Cần chạy lại, không được nộp file này.`);
+  }
+  if (B && A) {
+    const keys = ['provider', 'model', 'judge_provider', 'judge_model', 'max_steps', 'dataset'];
+    const diff = keys.filter(k => String(B.config[k]) !== String(A.config[k]));
+    if (diff.length) warns.push('Hai lần chạy khác cấu hình ở: ' + diff.join(', ') + '. So sánh sẽ không công bằng.');
+  }
+  if (warns.length) html += '<div class="card" style="margin-top:12px;border-color:var(--warn)">' +
+    warns.map(w => `<div style="color:var(--warn)">⚠ ${esc(w)}</div>`).join('') + '</div>';
+
+  // Lỗi cần chú ý: lấy từ lần chạy mới nhất đang có.
+  const latest = A || B;
+  const issues = [];
+  for (const c of latest.cases) {
+    const r = c.result || {}, g = c.grade || {};
+    const sc = scoreOf(c);
+    const why = [];
+    if (g.status !== 'scored') why.push('chưa chấm được (unscored)');
+    if (r.status && r.status !== 'completed') why.push('status = ' + r.status + (r.error ? ' (' + r.error + ')' : ''));
+    const viol = (g.mechanical || {}).violations || [];
+    if (viol.length) why.push('vi phạm kiểm tra code: ' + JSON.stringify(viol));
+    const miss = (r.trace || []).filter(e => e.event === 'validation_missing_source').length;
+    if (miss) why.push('thiếu URL nguồn ' + miss + ' lần');
+    if (sc != null && sc < 70) why.push('điểm thấp: ' + sc);
+    if (why.length) issues.push({ id: c.id, sc, why, tip: g.improvement || g.reason || '' });
+  }
+  issues.sort((a, b) => (a.sc ?? -1) - (b.sc ?? -1));
+  html += `<h2>Lỗi cần chú ý (${A ? 'lần 2' : 'lần 1'})</h2>`;
+  if (!issues.length) {
+    html += '<div class="card"><span class="up">Không phát hiện case nào có vấn đề rõ ràng.</span> <span class="hint">Điểm judge chỉ là ước lượng, vẫn nên xem trace.</span></div>';
+  } else {
+    html += '<div class="card" style="padding:0"><table><tr><th>Case</th><th class="num">Điểm</th><th>Vấn đề</th><th>Gợi ý của judge</th></tr>' +
+      issues.map(i => `<tr class="row" data-id="${esc(i.id)}"><td><b>${esc(i.id)}</b></td><td class="num">${i.sc == null ? '—' : esc(i.sc)}</td>
+        <td>${i.why.map(w => `<div>${esc(w)}</div>`).join('')}</td><td class="q">${esc(i.tip.slice(0, 220))}${i.tip.length > 220 ? '…' : ''}</td></tr>`).join('') +
+      '</table></div><p class="hint">Bấm một dòng để nhảy tới chi tiết case bên dưới.</p>';
+  }
+
+  // Cấu hình
+  html += '<h2>Cấu hình</h2><div class="card"><table><tr><th></th><th>Lần 1</th><th>Lần 2</th></tr>';
+  for (const k of ['provider', 'model', 'judge_provider', 'judge_model', 'max_steps', 'dataset']) {
+    html += `<tr><td>${esc(k)}</td><td>${esc(B ? B.config[k] : '—')}</td><td>${esc(A ? A.config[k] : '—')}</td></tr>`;
+  }
+  html += '</table></div>';
+
+  // Bảng case
+  const ids = [];
+  for (const S of [B, A]) if (S) for (const c of S.cases) if (!ids.includes(c.id)) ids.push(c.id);
+  const byId = S => Object.fromEntries((S ? S.cases : []).map(c => [c.id, c]));
+  const mb = byId(B), ma = byId(A);
+
+  const rows = ids.map(id => {
+    const sb = scoreOf(mb[id]), sa = scoreOf(ma[id]);
+    const d = (sb != null && sa != null) ? sa - sb : null;
+    return { id, cb: mb[id], ca: ma[id], sb, sa, d };
+  });
+  const shown = rows.filter(r => {
+    if (state.filter === 'all') return true;
+    if (state.filter === 'low') return (r.sa ?? r.sb ?? 101) < 70;
+    if (state.filter === 'up') return r.d != null && r.d > 0;
+    if (state.filter === 'down') return r.d != null && r.d < 0;
+    return true;
+  });
+
+  html += '<h2>Từng case</h2><div class="filters">' +
+    [['all', 'Tất cả'], ['low', 'Điểm < 70'], ['up', 'Tăng'], ['down', 'Giảm']]
+      .map(([k, l]) => `<button data-f="${k}" class="${state.filter === k ? 'on' : ''}">${l}</button>`).join('') + '</div>';
+  html += '<div class="card" style="padding:0;overflow-x:auto"><table><tr><th>Case</th><th>Câu hỏi</th>' +
+    '<th class="num">Lần 1</th><th class="num">Lần 2</th><th class="num">Δ</th></tr>';
+  for (const r of shown) {
+    const q = (r.ca || r.cb || {}).question || '';
+    html += `<tr class="row" data-id="${esc(r.id)}"><td><b>${esc(r.id)}</b></td><td class="q">${esc(q.slice(0, 140))}${q.length > 140 ? '…' : ''}</td>
+      <td class="num">${r.sb == null ? '—' : esc(r.sb)}</td><td class="num">${r.sa == null ? '—' : esc(r.sa)}</td>
+      <td class="num">${r.d == null ? '' : delta(r.sb, r.sa, true, 0)}</td></tr>`;
+    html += `<tr class="detail ${state.open === r.id ? 'open' : ''}" data-d="${esc(r.id)}"><td colspan="5">${state.open === r.id ? detail(r) : ''}</td></tr>`;
+  }
+  if (!shown.length) html += '<tr><td colspan="5" class="hint">Không có case nào khớp bộ lọc.</td></tr>';
+  html += '</table></div><p class="hint">Bấm một dòng để xem câu trả lời, lý do chấm, trace và chi phí.</p>';
+
+  out.innerHTML = html;
+  out.querySelectorAll('.filters button').forEach(b => b.onclick = () => { state.filter = b.dataset.f; render(); });
+  out.querySelectorAll('tr.row').forEach(tr => tr.onclick = () => {
+    const id = tr.dataset.id;
+    state.open = state.open === id ? null : id;
+    render();
+    if (state.open) {
+      const el = out.querySelector(`tr.detail[data-d="${CSS.escape(id)}"]`);
+      if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+  });
+}
+
+function caseBox(title, c) {
+  if (!c) return `<div class="box"><h4>${esc(title)}</h4><span class="hint">Không có dữ liệu.</span></div>`;
+  const r = c.result || {}, g = c.grade || {};
+  const dims = g.dimensions || {};
+  const trace = (r.trace || []);
+  const toolEv = trace.filter(e => e.event === 'tool');
+  const tokens = (r.usage || []).reduce((s, u) => s + tokensOf(u), 0);
+  const viol = ((g.mechanical || {}).violations) || [];
+
+  // Dấu hiệu tự phát hiện (heuristic của dashboard, chỉ để gợi ý, không phải kết luận chấm điểm).
+  const ans = r.answer || '';
+  const names = toolEv.map(e => e.name);
+  const urls = ans.match(/https?:\/\/[^\s)\]>"']+/g) || [];
+  const flags = [];
+  if (!names.length) flags.push(['warn', 'Không gọi tool nào']);
+  else if (!names.some(n => /incident_details/.test(n))) flags.push(['bad', 'Chưa gọi tool đọc chi tiết incident']);
+  const specific = urls.filter(u => { try { return new URL(u).pathname.length > 1; } catch (e) { return false; } });
+  if (!urls.length) flags.push(['bad', 'Câu trả lời không có URL nguồn']);
+  else if (!specific.length) flags.push(['warn', 'Chỉ có URL trang chủ, không có URL của incident cụ thể']);
+  else flags.push(['ok', specific.length + ' URL incident cụ thể trong câu trả lời']);
+  if (/hiện tại|hiện nay|bây giờ/i.test(ans) && !/snapshot|captured|09\/11|2026-11-09/i.test(ans))
+    flags.push(['warn', 'Nói "hiện tại" nhưng không nêu thời điểm snapshot']);
+  if (trace.some(e => e.event === 'validation_missing_source')) flags.push(['warn', 'Đã bị nhắc thiếu nguồn (validation_missing_source)']);
+  const flagHtml = flags.map(([k, t]) => `<span class="flag ${k}">${esc(t)}</span>`).join('');
+  const seq = toolEv.length
+    ? toolEv.map(e => `<div><b>step ${esc(e.step)}</b> · ${esc(e.name)}(${esc(JSON.stringify(e.arguments))})</div>`).join('')
+    : '<span class="hint">Không có tool call.</span>';
+
+  return `<div class="box"><h4>${esc(title)} · điểm ${esc(scoreOf(c) ?? '—')} · ${esc(r.status || '?')}</h4>
+    <div class="flags">${flagHtml}</div>
+    <div class="dims">${Object.keys(dims).map(k => `<div>${esc(k)}<b>${esc(dims[k])}</b></div>`).join('')}</div>
+    <p style="margin:10px 0 4px"><b>Tool đã gọi</b></p><div class="seq">${seq}</div>
+    <p style="margin:10px 0 4px"><b>Câu trả lời của model</b></p><pre>${esc(r.answer || '(trống)')}</pre>
+    <p style="margin:10px 0 4px"><b>Lý do chấm</b></p><pre>${esc(g.reason || '—')}</pre>
+    <p style="margin:10px 0 4px"><b>Gợi ý cải thiện</b></p><pre>${esc(g.improvement || '—')}</pre>
+    ${viol.length ? `<p class="down" style="margin:10px 0 0">Vi phạm (code): ${esc(JSON.stringify(viol))}</p>` : ''}
+    <p class="hint" style="margin:10px 0 0">${(r.usage || []).length} model call · ${toolEv.length} tool call · ${esc(tokens)} token
+      ${r.error ? ' · lỗi: ' + esc(r.error) : ''}</p>
+    <details><summary>Trace (${trace.length} event)</summary><pre>${esc(JSON.stringify(trace, null, 2))}</pre></details></div>`;
+}
+
+function detail(r) {
+  const c = r.ca || r.cb || {};
+  return `<div class="inner">
+    <div class="box" style="margin-bottom:12px"><h4>Câu hỏi</h4><pre>${esc(c.question || '')}</pre></div>
+    <div class="box expect" style="margin-bottom:12px"><h4>Kỳ vọng (expected) — đối chiếu với câu trả lời bên dưới</h4>
+      <pre>${esc(typeof c.expected === 'string' ? c.expected : JSON.stringify(c.expected, null, 2))}</pre>
+      <p class="hint" style="margin:8px 0 0">Dấu hiệu màu đỏ/cam bên dưới là gợi ý tự động của dashboard, không phải điểm chấm. Hãy tự đọc câu trả lời so với phần kỳ vọng này.</p></div>
+    <div class="two">${caseBox('Lần 1', r.cb)}${caseBox('Lần 2', r.ca)}</div></div>`;
+}
+
+// ---------- Tab "Báo cáo demo" theo slide CP6: một trace nhiều bước + một lỗi của agent ----------
+// Mọi dòng lấy từ result.trace thật; "#n" là vị trí thứ n trong mảng trace (đếm từ 1).
+const DEFAULT_NOTES = {
+  H6: {
+    cause: 'Model gọi get_status và get_incident_details song song ở step 1 rồi trả lời luôn. Agent loop không '
+      + 'kiểm tra incident được dẫn tới đã đọc chưa, nên không đọc incident gộp xr3myzj7ms51 và vi phạm kiểm tra '
+      + '"tool call ở ít nhất 2 model step" (trần 60).',
+    fix: 'Cổng validation_unfollowed_link trong agent.py: quét update của incident đã đọc tìm link /incidents/<id>; '
+      + 'nếu còn incident được dẫn tới chưa đọc thì nhắc model một lần đọc incident đó, giữ nguyên nội dung đã có '
+      + '(chỉ khi còn step + 2 <= max_steps).',
+  },
+};
+state.demo = { traceCase: 'H6', traceRun: 'after', errCase: 'H6', showModel: true, hl: null };
+const LINK_RE = /https?:\/\/(?:www\.)?(githubstatus|cloudflarestatus)\.com\/incidents\/([a-z0-9]+)/g;
+
+function getCase(run, id) {
+  const d = state[run];
+  return d ? (d.cases || []).find(c => c.id === id) || null : null;
+}
+function caseIds() {
+  const ids = [];
+  for (const r of ['before', 'after']) if (state[r]) for (const c of state[r].cases) if (!ids.includes(c.id)) ids.push(c.id);
+  return ids;
+}
+function linksIn(res) {
+  const out = [];
+  if (!res || typeof res !== 'object') return out;
+  for (const u of (res.updates || [])) {
+    const body = String((u && u.body) || '');
+    LINK_RE.lastIndex = 0;
+    let m;
+    while ((m = LINK_RE.exec(body))) if (m[2] !== res.id && !out.includes(m[2])) out.push(m[2]);
+  }
+  return out;
+}
+function summarizeResult(res) {
+  if (!res || typeof res !== 'object') return String(res);
+  if (res.ok === false) return `Lỗi ${res.error || ''}: ${res.message || ''}`;
+  if (Array.isArray(res.incidents) || res.overall) {
+    const ov = res.overall || {};
+    const ids = (res.incidents || []).map(i => i.id).join(', ');
+    return `overall: ${ov.description || ov.indicator || '?'} · ${(res.incidents || []).length} incident khớp`
+      + (res.matching_incidents_in_last_50 != null ? ` (${res.matching_incidents_in_last_50} trong 50 gần nhất)` : '')
+      + (ids ? ` · ${ids}` : '');
+  }
+  if (res.id && res.name) {
+    const links = linksIn(res);
+    return `${res.id} · "${res.name}" · ${res.status} · ${res.updates_total ?? '?'} update`
+      + (res.url ? ` · ${res.url}` : '') + (links.length ? ` · update dẫn tới: ${links.join(', ')}` : '');
+  }
+  return JSON.stringify(res).slice(0, 220);
+}
+function traceRows(c, showModel) {
+  const r = c.result || {};
+  const rows = [{ kind: 'q', label: 'Câu hỏi', text: c.question || '' }];
+  (r.trace || []).forEach((e, i) => {
+    const n = i + 1;
+    if (e.event === 'tool') {
+      rows.push({ n, kind: 'call', label: 'Tool call', text: `step ${e.step} · ${e.name}(${JSON.stringify(e.arguments)})` });
+      rows.push({ n, kind: 'res', label: 'Kết quả tool', text: summarizeResult(e.result), raw: e.result });
+    } else if (e.event === 'model') {
+      if (showModel) rows.push({ n, kind: 'model', label: 'Model', text: `step ${e.step} · finish=${e.finish}`
+        + (e.tools && e.tools.length ? ` · gọi ${e.tools.join(', ')}` : '') });
+    } else if (String(e.event).startsWith('validation')) {
+      rows.push({ n, kind: 'gate', label: 'Cổng kiểm tra', raw: e, text: `${e.event} · step ${e.step}`
+        + (e.incidents ? ` → ${e.incidents.join(', ')}` : '') + (e.sources ? ` · ${e.sources.join(', ')}` : '') });
+    } else {
+      rows.push({ n, kind: 'gate', label: 'Lỗi', text: JSON.stringify(e), raw: e });
+    }
+  });
+  const ans = r.answer || '(trống)';
+  rows.push({ kind: 'ans', label: 'Trả lời', text: ans.length > 320 ? ans.slice(0, 320) + '…' : ans,
+              full: ans.length > 320 ? ans : null, extra: `status: ${r.status || '?'}` });
+  return rows;
+}
+function timeline(rows, run, caseId) {
+  const D = state.demo;
+  return '<ol class="tl">' + rows.map(row => {
+    const hl = row.n != null && row.n === D.hl && D.traceRun === run && D.traceCase === caseId;
+    const raw = row.raw !== undefined
+      ? `<details><summary>JSON gốc</summary><pre>${esc(JSON.stringify(row.raw, null, 2))}</pre></details>` : '';
+    const full = row.full ? `<details><summary>Xem toàn bộ câu trả lời</summary><pre>${esc(row.full)}</pre></details>` : '';
+    return `<li class="tl-row k-${row.kind}${hl ? ' hl' : ''}"${row.n != null ? ` data-line="${row.n}"` : ''}>
+      <span class="tl-dot"></span><span class="chip2">${esc(row.label)}</span>
+      <div class="tl-body">${row.n != null ? `<span class="ln">#${row.n}</span>` : ''}<span class="tl-text">${esc(row.text)}</span>
+      ${row.extra ? `<div class="sub2">${esc(row.extra)}</div>` : ''}${full}${raw}</div></li>`;
+  }).join('') + '</ol>';
+}
+function ref(run, caseId, n, ok) {
+  return `<button class="ref${ok ? ' ok' : ''}" data-ref="${run}|${esc(caseId)}|${n}" title="Mở dòng này trong khung trace">#${n}</button>`;
+}
+// Bằng chứng tự lấy từ trace + kiểm tra bằng code của chính file eval.
+function evidence(c, run) {
+  const r = c.result || {}, tr = r.trace || [], g = c.grade || {};
+  const items = [];
+  const tools = tr.map((e, i) => [e, i + 1]).filter(([e]) => e.event === 'tool');
+  for (const v of ((g.mechanical || {}).violations || [])) {
+    const steps = [...new Set(tools.map(([e]) => e.step))];
+    items.push({ text: `Kiểm tra bằng code: "${v}" → trần ${(g.mechanical || {}).score_cap}. Tool chỉ chạy ở step ${steps.join(', ') || '—'}.`,
+                 refs: tools.map(([, n]) => n) });
+  }
+  const attempted = new Set(tools.filter(([e]) => /incident_details/.test(e.name))
+    .map(([e]) => String((e.arguments || {}).incident_id)));
+  const seen = new Set();
+  for (const [e, n] of tools) for (const id of linksIn(e.result)) {
+    if (attempted.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    items.push({ text: `Kết quả tool có update dẫn tới incident ${id}, nhưng không có tool call nào đọc incident này.`, refs: [n] });
+  }
+  tr.forEach((e, i) => {
+    if (String(e.event).startsWith('validation'))
+      items.push({ text: `Cổng ${e.event} chạy ở step ${e.step}.`, refs: [i + 1] });
+  });
+  items.push({ text: `Điểm ${scoreOf(c) ?? '—'} (judge chấm thô ${g.raw_judge_score ?? '—'}). Lý do của judge: ${g.reason || '—'}`, refs: [] });
+  return items.map(it => `<li>${it.refs.map(n => ref(run, c.id, n)).join('')}${esc(it.text)}</li>`).join('');
+}
+function afterBox(c) {
+  if (!c) return '<div class="after-box">Chưa có kết quả Lần 2 cho case này.</div>';
+  const tr = (c.result || {}).trace || [], g = c.grade || {};
+  const v = (g.mechanical || {}).violations || [];
+  const lines = [];
+  tr.forEach((e, i) => {
+    if (String(e.event).startsWith('validation'))
+      lines.push(`${ref('after', c.id, i + 1, true)}${esc(e.event)} ở step ${esc(e.step)}${e.incidents ? ' → ' + esc(e.incidents.join(', ')) : ''}`);
+    else if (e.event === 'tool')
+      lines.push(`${ref('after', c.id, i + 1, true)}step ${esc(e.step)} · ${esc(e.name)}(${esc(JSON.stringify(e.arguments))})`);
+  });
+  return `<div class="after-box"><b>Sau cải tiến (Lần 2):</b> điểm ${esc(scoreOf(c) ?? '—')} (thô ${esc(g.raw_judge_score ?? '—')}) ·
+    vi phạm kiểm tra bằng code: ${v.length ? esc(v.join('; ')) : '<b>không còn</b>'}<ul>${lines.map(l => `<li>${l}</li>`).join('')}</ul></div>`;
+}
+function loadNotes(id) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('demo-notes-' + id) || 'null'); } catch (e) { saved = null; }
+  return Object.assign({ cause: '', fix: '' }, DEFAULT_NOTES[id] || {}, saved || {});
+}
+function saveNotes(id, key, value) {
+  try { const cur = loadNotes(id); cur[key] = value; localStorage.setItem('demo-notes-' + id, JSON.stringify(cur)); } catch (e) { /* bỏ qua */ }
+}
+
+function renderDemo() {
+  const out = $('demo');
+  if (!out) return;
+  if (!state.before && !state.after) {
+    out.innerHTML = '<p class="hint">Chưa có dữ liệu. Mở trang qua Live Server để tự đọc eval_before.json và eval_after.json, '
+      + 'hoặc chọn file ở tab "Chi tiết eval".</p>';
+    return;
+  }
+  const D = state.demo, ids = caseIds();
+  if (!ids.includes(D.traceCase)) D.traceCase = ids[0];
+  if (!ids.includes(D.errCase)) D.errCase = ids[0];
+  if (!state[D.traceRun]) D.traceRun = state.after ? 'after' : 'before';
+  const opt = sel => ids.map(i => `<option${i === sel ? ' selected' : ''}>${esc(i)}</option>`).join('');
+  const runOpt = ['before', 'after'].filter(r => state[r])
+    .map(r => `<option value="${r}"${r === D.traceRun ? ' selected' : ''}>${r === 'before' ? 'Lần 1 (before)' : 'Lần 2 (after)'}</option>`).join('');
+  const tc = getCase(D.traceRun, D.traceCase);
+  const eb = getCase('before', D.errCase), ea = getCase('after', D.errCase), notes = loadNotes(D.errCase);
+  const base = eb || ea;
+
+  const left = `<div class="win" id="win-trace">
+    <div class="win-h"><i class="d r"></i><i class="d y"></i><i class="d g"></i><span class="win-t">Một trace nhiều bước</span></div>
+    <div class="win-ctl"><label>Case <select id="d-tcase">${opt(D.traceCase)}</select></label>
+      <label>Lần chạy <select id="d-trun">${runOpt}</select></label>
+      <label><input type="checkbox" id="d-model"${D.showModel ? ' checked' : ''}> Hiện dòng model</label>
+      ${tc ? `<span class="pill">điểm ${esc(scoreOf(tc) ?? '—')} · ${esc((tc.result || {}).status || '?')}</span>` : ''}</div>
+    <div class="win-b">${tc ? timeline(traceRows(tc, D.showModel), D.traceRun, D.traceCase)
+      : '<p class="hint">Không có case này trong lần chạy đã chọn.</p>'}</div></div>`;
+
+  const right = `<div class="win err">
+    <div class="win-h"><i class="d r"></i><i class="d y"></i><i class="d g"></i><span class="win-t">Một lỗi của agent</span></div>
+    <div class="win-ctl"><label>Case <select id="d-ecase">${opt(D.errCase)}</select></label>
+      <span>Bằng chứng lấy từ Lần 1; bấm <b>#số</b> để mở đúng dòng trace bên trái.</span></div>
+    <div class="win-b">${!base ? '<p class="hint">Không có dữ liệu cho case này.</p>' : `<ol class="tl">
+      <li class="tl-row k-q"><span class="tl-dot"></span><span class="chip2">Case</span><div class="tl-body">
+        <b>${esc(base.id)}</b> · ${esc(base.question || '')}
+        <div class="sub2">Kỳ vọng: ${esc(typeof base.expected === 'string' ? base.expected : JSON.stringify(base.expected))}</div>
+        <div class="sub2">Lần 1: ${esc(eb ? scoreOf(eb) ?? '—' : '—')} → Lần 2: ${esc(ea ? scoreOf(ea) ?? '—' : '—')}</div></div></li>
+      <li class="tl-row k-gate"><span class="tl-dot"></span><span class="chip2">Bằng chứng</span><div class="tl-body">
+        ${eb ? `<ul class="evi">${evidence(eb, 'before')}</ul>` : '<span class="hint">Chưa có Lần 1.</span>'}</div></li>
+      <li class="tl-row k-q"><span class="tl-dot"></span><span class="chip2">Nguyên nhân</span><div class="tl-body">
+        <textarea data-note="cause" placeholder="Nguyên nhân, chỉ vào dòng #… trong trace">${esc(notes.cause)}</textarea></div></li>
+      <li class="tl-row k-ans"><span class="tl-dot"></span><span class="chip2">Cách sửa</span><div class="tl-body">
+        <textarea data-note="fix" placeholder="Thay đổi trong agent.py">${esc(notes.fix)}</textarea>${afterBox(ea)}</div></li>
+    </ol>`}</div></div>`;
+
+  out.innerHTML = `<h2 class="cp-title">CP6 · Demo và thảo luận</h2>
+    <p class="cp-sub"><span class="badge">Mở trace thật</span>Mọi dòng bên dưới đọc thẳng từ result.trace của file eval, không kể lại.</p>
+    <div class="demo-grid">${left}${right}</div>
+    <div class="done"><b>✓ Xong khi</b>Mỗi nhận định của bạn chỉ vào một dòng trong trace (nút <b>#số</b>).
+      Nguyên nhân và cách sửa sửa được trực tiếp; nội dung chỉ lưu trong trình duyệt này.</div>`;
+
+  $('d-tcase').onchange = e => { D.traceCase = e.target.value; D.hl = null; renderDemo(); };
+  $('d-trun').onchange = e => { D.traceRun = e.target.value; D.hl = null; renderDemo(); };
+  $('d-model').onchange = e => { D.showModel = e.target.checked; renderDemo(); };
+  $('d-ecase').onchange = e => { D.errCase = e.target.value; renderDemo(); };
+  out.querySelectorAll('textarea[data-note]').forEach(t => t.oninput = () => saveNotes(D.errCase, t.dataset.note, t.value));
+  out.querySelectorAll('.ref').forEach(b => b.onclick = () => {
+    const [run, caseId, n] = b.dataset.ref.split('|');
+    D.traceRun = run; D.traceCase = caseId; D.hl = Number(n); D.showModel = true;
+    renderDemo();
+    const row = $('demo').querySelector(`#win-trace li[data-line="${Number(n)}"]`);
+    if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
+}
+
+function setTab(t) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $('tab-demo').hidden = t !== 'demo';
+  $('tab-eval').hidden = t !== 'eval';
+  try { localStorage.setItem('dash-tab', t); } catch (e) { /* bỏ qua */ }
+}
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+let initialTab = 'demo';
+try { initialTab = localStorage.getItem('dash-tab') || 'demo'; } catch (e) { initialTab = 'demo'; }
+setTab(initialTab === 'eval' ? 'eval' : 'demo');
+
+render();
+autoLoad();
+</script>
+</body>
+</html>
